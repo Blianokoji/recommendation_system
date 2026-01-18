@@ -27,3 +27,4 @@ chroma_db/
 Thumbs.db
 .vscode/
 .idea/
+.env
