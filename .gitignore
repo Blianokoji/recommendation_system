@@ -1,0 +1,29 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Virtual requirements.txt
+
+# Project Artifacts (Models, Embeddings, DB)
+chroma_db/
+*.joblib
+*.pkl
+*.npy
+*.pt
+*.onnx
+
+# Data
+*.csv
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
