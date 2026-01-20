@@ -81,25 +81,28 @@ def retrieve_candidates(
 
     soft_intent = parsed["soft_constraints"]
 
-    semantic_phrases = [
-        v["matched_phrase"]
-        for v in soft_intent.values()
-        if "matched_phrase" in v
-    ]
+    semantic_embeddings = []
 
-    # Fallback if no soft intent
-    if semantic_phrases:
-        semantic_query = " ".join(semantic_phrases)
+    for key, constraint in soft_intent.items():
+        phrase = constraint.get("matched_phrase")
+        confidence = constraint.get("confidence", 0.0)
+
+        # Ignore weak semantic signals
+        if phrase and confidence >= 0.45:
+            semantic_embeddings.append(embed_text(phrase))
+
+    # Fallback if no reliable soft intent
+    if semantic_embeddings:
+        query_embedding = np.mean(semantic_embeddings, axis=0)
     else:
-        semantic_query = "movie"
-
-    query_embedding = embed_text(semantic_query)
+        query_embedding = embed_text("movie")
 
     # ------------------------------------------------
     # HARD CONSTRAINTS → WHERE_DOCUMENT (Actors)
     # ------------------------------------------------
     
     where_document = None
+    actor_tokens = []
     actors = parsed["hard_constraints"]["actors"]
     if actors:
         # Relaxed token-based matching (AND logic across tokens)
@@ -164,6 +167,34 @@ def retrieve_candidates(
                 "title": titles[idx],
                 "metadata": metas[idx]
             })
+    # ------------------------------------------------
+    # HARD ACTOR PRIORITY ENFORCEMENT
+    # ------------------------------------------------
+
+    if actor_tokens:
+        final = [
+            m for m in final
+            if all(
+                token.lower() in (m["metadata"].get("actor", "") or "").lower()
+                for token in actor_tokens
+            )
+        ]
+    # ------------------------------------------------
+    # EXPLAINABILITY PAYLOAD (NON-INTRUSIVE)
+    # ------------------------------------------------
+
+    for m in final:
+        m["explanation"] = {
+            "actor_constraint": actors[0] if actors else None,
+            "semantic_components": [
+                v["matched_phrase"]
+                for v in soft_intent.values()
+                if v.get("matched_phrase") and v.get("confidence", 0.0) >= 0.45
+            ],
+            "soft_constraints": soft_intent,
+            "filters_applied": where_clause
+        }
+
 
     return final
 
@@ -177,3 +208,20 @@ if __name__ == "__main__":
     print("\nRetrieved Candidates:\n")
     for r in results:
         print(f"{r['tmdb_id']} | {r['title']}")
+        if "explanation" in r:
+            exp = r["explanation"]
+            print("  ↳ Explanation:")
+            print(f"     Actor Constraint      : {exp['actor_constraint']}")
+
+            semantic_components = exp.get("semantic_components", [])
+            if semantic_components:
+                print("     Semantic Signals Used :")
+                for s in semantic_components:
+                    print(f"        - {s}")
+            else:
+                print("     Semantic Signals Used : None")
+
+            print(f"     Soft Constraints     : {list(exp['soft_constraints'].keys())}")
+            print(f"     Filters Applied      : {exp['filters_applied']}")
+            print()
+

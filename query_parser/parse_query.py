@@ -17,7 +17,7 @@ from typing import Dict, List
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
-
+from .semantic_axes import SEMANTIC_AXES
 # ============================================================
 # PATHS
 # ============================================================
@@ -63,28 +63,28 @@ KNOWN_ACTORS = load_actor_vocabulary(ACTOR_STATS_CSV)
 # SEMANTIC AXES (OPEN VOCABULARY)
 # ============================================================
 
-SEMANTIC_AXES = {
-    "emotion": [
-        "emotionally intense",
-        "sad and touching",
-        "heartfelt drama",
-        "deep emotional journey",
-        "moving story"
-    ],
-    "genre": [
-        "action packed movie",
-        "romantic film",
-        "psychological thriller",
-        "science fiction movie",
-        "light hearted comedy"
-    ],
-    "tone": [
-        "dark and gritty",
-        "uplifting and inspiring",
-        "slow paced artistic film",
-        "fast paced blockbuster"
-    ]
-}
+# SEMANTIC_AXES = {
+#     "emotion": [
+#         "emotionally intense",
+#         "sad and touching",
+#         "heartfelt drama",
+#         "deep emotional journey",
+#         "moving story"
+#     ],
+#     "genre": [
+#         "action packed movie",
+#         "romantic film",
+#         "psychological thriller",
+#         "science fiction movie",
+#         "light hearted comedy"
+#     ],
+#     "tone": [
+#         "dark and gritty",
+#         "uplifting and inspiring",
+#         "slow paced artistic film",
+#         "fast paced blockbuster"
+#     ]
+# }
 
 # ============================================================
 # MODEL LOAD (ONCE)
