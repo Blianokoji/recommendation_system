@@ -41,6 +41,44 @@ _embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
 def embed_text(text: str) -> np.ndarray:
     return _embedding_model.encode(text, normalize_embeddings=True)
 
+# ------------------------------------------------
+# WEIGHTED SCORING (PAPER-ALIGNED)
+# ------------------------------------------------
+
+def compute_weighted_scores(
+    embeddings: np.ndarray,
+    query_embedding: np.ndarray,
+    cluster_labels: np.ndarray
+) -> List[float]:
+    """
+    Computes weighted ranking scores using:
+    - Semantic similarity (Q)
+    - Cluster coherence (C)
+
+    Hard constraints (actors, safety) are already enforced.
+    """
+
+    # ---- weights (as per paper) ----
+    W_Q = 0.65   # semantic relevance
+    W_C = 0.35   # cluster alignment
+
+    # ---- semantic similarity (cosine) ----
+    semantic_scores = embeddings @ query_embedding
+
+    # ---- cluster relevance ----
+    dominant_cluster = np.bincount(cluster_labels).argmax()
+    cluster_scores = np.array([
+        1.0 if label == dominant_cluster else 0.0
+        for label in cluster_labels
+    ])
+
+    # ---- final weighted score ----
+    final_scores = (
+        W_Q * semantic_scores +
+        W_C * cluster_scores
+    )
+
+    return final_scores.tolist()
 
 def retrieve_candidates(
     query: str,
@@ -144,29 +182,26 @@ def retrieve_candidates(
     local_k = min(LOCAL_CLUSTERS, len(embeddings))
     clusterer = AgglomerativeClustering(n_clusters=local_k)
     labels = clusterer.fit_predict(embeddings)
+    scores = compute_weighted_scores(
+        embeddings=embeddings,
+        query_embedding=query_embedding,
+        cluster_labels=labels
+    )
 
-    clusters = {}
-    for i, label in enumerate(labels):
-        clusters.setdefault(label, []).append(i)
-
-    sorted_clusters = sorted(
-        clusters.values(),
-        key=len,
+    ranked_indices = sorted(
+        range(len(ids)),
+        key=lambda i: scores[i],
         reverse=True
     )
 
-    # ------------------------------------------------
-    # FINAL SELECTION
-    # ------------------------------------------------
-
     final = []
-    for cluster in sorted_clusters:
-        for idx in cluster[:RETURN_PER_CLUSTER]:
-            final.append({
-                "tmdb_id": ids[idx],
-                "title": titles[idx],
-                "metadata": metas[idx]
-            })
+    for idx in ranked_indices[:RETURN_PER_CLUSTER * LOCAL_CLUSTERS]:
+        final.append({
+            "tmdb_id": ids[idx],
+            "title": titles[idx],
+            "metadata": metas[idx],
+            "score": round(scores[idx], 4)
+        })
     # ------------------------------------------------
     # HARD ACTOR PRIORITY ENFORCEMENT
     # ------------------------------------------------
@@ -183,17 +218,29 @@ def retrieve_candidates(
     # EXPLAINABILITY PAYLOAD (NON-INTRUSIVE)
     # ------------------------------------------------
 
-    for m in final:
+    for i, m in enumerate(final):
         m["explanation"] = {
             "actor_constraint": actors[0] if actors else None,
+
             "semantic_components": [
                 v["matched_phrase"]
-                for v in soft_intent.values()
-                if v.get("matched_phrase") and v.get("confidence", 0.0) >= 0.45
-            ],
-            "soft_constraints": soft_intent,
-            "filters_applied": where_clause
+            for v in soft_intent.values()
+            if v.get("matched_phrase") and v.get("confidence", 0.0) >= 0.45
+        ],
+
+        "soft_constraints": soft_intent,
+
+        "filters_applied": where_clause,
+
+        # ---- scoring transparency ----
+            "weighted_score": round(m["score"], 4),
+            "score_breakdown": {
+                "semantic_weight": 0.65,
+                "cluster_weight": 0.35,
+                "note": "Hard constraints enforced before scoring"
+            }
         }
+
 
 
     return final
@@ -208,11 +255,15 @@ if __name__ == "__main__":
     print("\nRetrieved Candidates:\n")
     for r in results:
         print(f"{r['tmdb_id']} | {r['title']}")
+
         if "explanation" in r:
             exp = r["explanation"]
-            print("  Explanation:")
-            print(f"     Actor Constraint      : {exp['actor_constraint']}")
+            print("  ↳ Explanation:")
 
+            # Actor constraint
+            print(f"     Actor Constraint      : {exp.get('actor_constraint')}")
+
+            # Semantic signals actually used
             semantic_components = exp.get("semantic_components", [])
             if semantic_components:
                 print("     Semantic Signals Used :")
@@ -221,7 +272,24 @@ if __name__ == "__main__":
             else:
                 print("     Semantic Signals Used : None")
 
-            print(f"     Soft Constraints     : {list(exp['soft_constraints'].keys())}")
-            print(f"     Filters Applied      : {exp['filters_applied']}")
+            # Soft constraints (axes detected)
+            soft_keys = list(exp.get("soft_constraints", {}).keys())
+            print(f"     Soft Constraints     : {soft_keys if soft_keys else 'None'}")
+
+            # Filters
+            print(f"     Filters Applied      : {exp.get('filters_applied')}")
+
+            # Weighted score
+            if "weighted_score" in exp:
+                print(f"     Final Weighted Score : {exp['weighted_score']}")
+
+            # Optional score breakdown (paper alignment)
+            breakdown = exp.get("score_breakdown")
+            if breakdown:
+                print("     Score Breakdown      :")
+                for k, v in breakdown.items():
+                    print(f"        - {k.replace('_', ' ').title()} : {v}")
+
             print()
+
 
