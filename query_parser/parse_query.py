@@ -6,9 +6,10 @@ hard (deterministic) and soft (semantic) constraints.
 
 Design principles:
 - Identity entities (actors) are enforced as hard constraints
-- Abstract intent (emotion, genre, tone) is inferred semantically
+- Abstract intent (emotion, tone) is inferred semantically
+- Genre is treated as an inferred signal, not a constraint
 - No keyword hardcoding for abstract intent
-- Output is retrieval-ready JSON
+- Output is retrieval- and reasoning-ready JSON
 """
 
 import os
@@ -18,6 +19,7 @@ from typing import Dict, List
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from .semantic_axes import SEMANTIC_AXES
+
 # ============================================================
 # PATHS
 # ============================================================
@@ -41,7 +43,6 @@ def load_actor_vocabulary(csv_path: str) -> List[str]:
     if "actor" not in df.columns:
         raise ValueError("actor_stats.csv must contain 'actor' column")
 
-    # Normalize names for robust matching
     actors = (
         df["actor"]
         .dropna()
@@ -52,39 +53,12 @@ def load_actor_vocabulary(csv_path: str) -> List[str]:
         .tolist()
     )
 
-    # Sort longest names first (avoids partial match issues)
+    # Longest names first to avoid partial matches
     actors.sort(key=len, reverse=True)
     return actors
 
 
 KNOWN_ACTORS = load_actor_vocabulary(ACTOR_STATS_CSV)
-
-# ============================================================
-# SEMANTIC AXES (OPEN VOCABULARY)
-# ============================================================
-
-# SEMANTIC_AXES = {
-#     "emotion": [
-#         "emotionally intense",
-#         "sad and touching",
-#         "heartfelt drama",
-#         "deep emotional journey",
-#         "moving story"
-#     ],
-#     "genre": [
-#         "action packed movie",
-#         "romantic film",
-#         "psychological thriller",
-#         "science fiction movie",
-#         "light hearted comedy"
-#     ],
-#     "tone": [
-#         "dark and gritty",
-#         "uplifting and inspiring",
-#         "slow paced artistic film",
-#         "fast paced blockbuster"
-#     ]
-# }
 
 # ============================================================
 # MODEL LOAD (ONCE)
@@ -162,7 +136,8 @@ def parse_query(query: str) -> Dict:
         Structured JSON with:
         - intent_type
         - hard_constraints
-        - soft_constraints
+        - soft_constraints (emotion, tone)
+        - inferred_signals (genre, others)
         - filters
         - confidence
     """
@@ -190,16 +165,26 @@ def parse_query(query: str) -> Dict:
     for actor in KNOWN_ACTORS:
         if actor in q:
             actors.append(actor.title())
-            # Remove actor mention to avoid semantic pollution
+            # Remove actor mention to prevent semantic pollution
             q = q.replace(actor, " ")
 
-    q = " ".join(q.split())  # normalize spaces
+    q = " ".join(q.split())
 
     # --------------------------------------------------------
-    # SOFT CONSTRAINTS (SEMANTIC)
+    # SOFT + INFERRED INTENT (SEMANTIC)
     # --------------------------------------------------------
 
-    soft_intent = infer_soft_intent(q)
+    raw_soft_intent = infer_soft_intent(q)
+
+    soft_constraints = {}
+    inferred_signals = {}
+
+    for axis, data in raw_soft_intent.items():
+        if axis in {"emotion", "tone"}:
+            soft_constraints[axis] = data
+        else:
+            # Genre and other axes are signals, not constraints
+            inferred_signals[axis] = data
 
     # --------------------------------------------------------
     # SAFETY FILTERS
@@ -216,7 +201,7 @@ def parse_query(query: str) -> Dict:
     confidence = 0.6
     if actors:
         confidence += 0.25
-    if soft_intent:
+    if soft_constraints:
         confidence += 0.1
     confidence = min(confidence, 1.0)
 
@@ -229,7 +214,8 @@ def parse_query(query: str) -> Dict:
         "hard_constraints": {
             "actors": actors
         },
-        "soft_constraints": soft_intent,
+        "soft_constraints": soft_constraints,
+        "inferred_signals": inferred_signals,
         "filters": {
             "allow_adult": allow_adult
         },
