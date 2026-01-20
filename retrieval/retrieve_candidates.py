@@ -210,7 +210,7 @@ if __name__ == "__main__":
         print(f"{r['tmdb_id']} | {r['title']}")
         if "explanation" in r:
             exp = r["explanation"]
-            print("  ↳ Explanation:")
+            print("  Explanation:")
             print(f"     Actor Constraint      : {exp['actor_constraint']}")
 
             semantic_components = exp.get("semantic_components", [])
