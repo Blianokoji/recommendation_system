@@ -59,8 +59,8 @@ This project uses `uv` for blazing fast dependency management.
 # Initialize venv and install dependencies
 uv sync
 
-# Or manually:
-uv pip install -r requirements.txt
+# or manually install dependencies
+uv add <each dependency>
 ```
 
 ### 3. Configure Environment Variables
@@ -92,17 +92,22 @@ uv run retrieval/retrieve_candidates.py
 
 ```bash
 recommendation_system/
-├── 📂 vector_store/       # ChromaDB client & ingestion logic
-│   ├── chroma_ingest.py
-│   └── chroma_client.py
-├── 📂 retrieval/          # Core retrieval & filtering logic
-│   └── retrieve_candidates.py
-├── 📂 query_parser/       # Intent extraction & query understanding
+├── 📂 api/                # FastAPI application endpoints
+├── 📂 centroids/          # Centroid data for clustering
+├── 📂 chroma_db/          # Persistent Vector Store (ChromaDB)
+├── 📂 clustering/         # Clustering logic & datasets
+├── 📂 data_clean/         # Data cleaning & preprocessing utilities
+├── 📂 data_stats/         # Data analysis & statistics
 ├── 📂 embeddings/         # Embedding generation scripts
-├── 📂 models/             # Clustering models (KMeans, etc.)
-├── 📂 data_clean/         # Data cleaning utilities
-├── 📄 requirements.txt    # Project dependencies
-└── 📄 README.md           # Documentation
+├── 📂 models/             # Saved models (e.g., KMeans, PCA)
+├── 📂 pipeline/           # Data ingestion & processing pipelines
+├── 📂 query_parser/       # Intent extraction & query understanding
+├── 📂 retrieval/          # Core retrieval & filtering logic
+├── 📂 vector_store/       # ChromaDB client & ingestion logic
+├── 📄 .env                # Environment variables
+├── 📄 pyproject.toml      # Project configuration & dependencies
+├── 📄 README.md           # Documentation
+└── 📄 tmdb_clustered_incremental.csv # Processed dataset
 ```
 
 ## 🧠 How It Works
