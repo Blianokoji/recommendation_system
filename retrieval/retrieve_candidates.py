@@ -87,8 +87,15 @@ def retrieve_candidates(
 
     parsed = parse_query(query)
 
-    if parsed["intent_type"] != "movie_search":
-        return []
+    intent_passable = (
+        parsed.get("intent_type") == "movie_search"
+    )
+    if not intent_passable:
+        return {
+            "intent_passable": False,
+            "reason": parsed.get("reason", "Invalid intent"),
+            "results": []
+        }
 
     collection = get_chroma_collection()
 
@@ -243,14 +250,21 @@ def retrieve_candidates(
 
 
 
-    return final
+    return {
+        "intent_passable": True,
+        "intent_confidence": parsed.get("confidence"),
+        "parsed_intent": parsed,
+        "results": final
+    }
+
 
 
 # ------------------ DEMO ------------------
 
 if __name__ == "__main__":
     query = "emotional Tom Cruise movies"
-    results = retrieve_candidates(query)
+    res = retrieve_candidates(query)
+    results = res["results"]
 
     print("\nRetrieved Candidates:\n")
     for r in results:
