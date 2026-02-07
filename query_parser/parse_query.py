@@ -18,7 +18,7 @@ from typing import Dict, List
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
-from .semantic_axes import SEMANTIC_AXES
+from semantic_axes import SEMANTIC_AXES
 
 # ============================================================
 # PATHS

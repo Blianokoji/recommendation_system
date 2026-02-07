@@ -1,14 +1,17 @@
 """
-Candidate Retrieval Module (Fixed)
+Candidate Retrieval Module (Final)
 ---------------------------------
 Uses structured query intent to perform:
 
 1. Hard constraint filtering (actor, safety)
-2. Semantic retrieval using soft intent phrases
+2. Semantic retrieval using dominant soft intent signals
 3. Local clustering for diversity
+4. Weighted scoring (paper-aligned)
+5. Explainability payload
 
-NO keyword OR behavior.
-NO identity leakage into embeddings.
+NO keyword OR behavior
+NO identity leakage into embeddings
+Deterministic, safe, demo-ready
 """
 
 import os
@@ -24,7 +27,9 @@ from sklearn.cluster import AgglomerativeClustering
 from vector_store.chroma_client import get_chroma_collection
 from query_parser.parse_query import parse_query
 
-# ------------------ CONFIG ------------------
+# ------------------------------------------------
+# CONFIG
+# ------------------------------------------------
 
 RETRIEVAL_LIMIT = 80
 LOCAL_CLUSTERS = 4
@@ -32,17 +37,21 @@ RETURN_PER_CLUSTER = 5
 
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 
-# ------------------ MODEL ------------------
+# Weights as per paper
+W_Q = 0.65   # semantic relevance
+W_C = 0.35   # cluster coherence
+
+# ------------------------------------------------
+# MODEL
+# ------------------------------------------------
 
 _embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
-
-# ------------------ CORE ------------------
 
 def embed_text(text: str) -> np.ndarray:
     return _embedding_model.encode(text, normalize_embeddings=True)
 
 # ------------------------------------------------
-# WEIGHTED SCORING (PAPER-ALIGNED)
+# WEIGHTED SCORING
 # ------------------------------------------------
 
 def compute_weighted_scores(
@@ -51,28 +60,20 @@ def compute_weighted_scores(
     cluster_labels: np.ndarray
 ) -> List[float]:
     """
-    Computes weighted ranking scores using:
-    - Semantic similarity (Q)
-    - Cluster coherence (C)
+    Score(m) = w_q * Q(m) + w_c * C(m)
 
-    Hard constraints (actors, safety) are already enforced.
+    Q(m): cosine similarity with semantic query
+    C(m): dominant local cluster alignment
     """
 
-    # ---- weights (as per paper) ----
-    W_Q = 0.65   # semantic relevance
-    W_C = 0.35   # cluster alignment
-
-    # ---- semantic similarity (cosine) ----
     semantic_scores = embeddings @ query_embedding
 
-    # ---- cluster relevance ----
     dominant_cluster = np.bincount(cluster_labels).argmax()
     cluster_scores = np.array([
         1.0 if label == dominant_cluster else 0.0
         for label in cluster_labels
     ])
 
-    # ---- final weighted score ----
     final_scores = (
         W_Q * semantic_scores +
         W_C * cluster_scores
@@ -80,17 +81,20 @@ def compute_weighted_scores(
 
     return final_scores.tolist()
 
+# ------------------------------------------------
+# MAIN RETRIEVAL
+# ------------------------------------------------
+
 def retrieve_candidates(
     query: str,
     allow_adult_override: bool = None
-) -> List[Dict]:
+) -> Dict:
 
     parsed = parse_query(query)
 
-    intent_passable = (
-        parsed.get("intent_type") == "movie_search"
-    )
-    if not intent_passable:
+    # ------------------ INTENT GATE ------------------
+
+    if parsed.get("intent_type") != "movie_search":
         return {
             "intent_passable": False,
             "reason": parsed.get("reason", "Invalid intent"),
@@ -100,12 +104,11 @@ def retrieve_candidates(
     collection = get_chroma_collection()
 
     # ------------------------------------------------
-    # HARD CONSTRAINTS → WHERE FILTER
+    # HARD CONSTRAINTS → METADATA FILTER
     # ------------------------------------------------
 
     where_filters = []
 
-    # Adult safety
     allow_adult = parsed["filters"]["allow_adult"]
     if allow_adult_override is not None:
         allow_adult = allow_adult_override
@@ -121,45 +124,54 @@ def retrieve_candidates(
         where_clause = None
 
     # ------------------------------------------------
-    # SOFT CONSTRAINT → SEMANTIC QUERY
+    # SOFT CONSTRAINTS → DOMINANT SEMANTIC QUERY
     # ------------------------------------------------
 
     soft_intent = parsed["soft_constraints"]
 
+    # Determine dominant semantic signal
+    max_conf = max(
+        (v.get("confidence", 0.0) for v in soft_intent.values()),
+        default=0.0
+    )
+
     semantic_embeddings = []
+    used_semantic_phrases = []
 
-    for key, constraint in soft_intent.items():
+    for constraint in soft_intent.values():
         phrase = constraint.get("matched_phrase")
-        confidence = constraint.get("confidence", 0.0)
+        conf = constraint.get("confidence", 0.0)
 
-        # Ignore weak semantic signals
-        if phrase and confidence >= 0.45:
+        # Only include dominant or near-dominant signals
+        if (
+            phrase and
+            conf >= 0.45 and
+            conf >= 0.85 * max_conf
+        ):
             semantic_embeddings.append(embed_text(phrase))
+            used_semantic_phrases.append(phrase)
 
-    # Fallback if no reliable soft intent
     if semantic_embeddings:
         query_embedding = np.mean(semantic_embeddings, axis=0)
     else:
         query_embedding = embed_text("movie")
 
     # ------------------------------------------------
-    # HARD CONSTRAINTS → WHERE_DOCUMENT (Actors)
+    # HARD CONSTRAINTS → DOCUMENT FILTER (ACTORS)
     # ------------------------------------------------
-    
+
     where_document = None
     actor_tokens = []
     actors = parsed["hard_constraints"]["actors"]
+
     if actors:
-        # Relaxed token-based matching (AND logic across tokens)
-        # e.g. "Tom Cruise" -> matches "Tom" AND "Cruise" (any order)
-        # This prevents "Tom Hardy" from matching "Tom Cruise" while allowing "Cruise, Tom"
         actor_tokens = actors[0].split()
         if len(actor_tokens) == 1:
-             where_document = {"$contains": actor_tokens[0]}
+            where_document = {"$contains": actor_tokens[0]}
         else:
-             where_document = {
-                 "$and": [{"$contains": token} for token in actor_tokens]
-             }
+            where_document = {
+                "$and": [{"$contains": t} for t in actor_tokens]
+            }
 
     # ------------------------------------------------
     # VECTOR RETRIEVAL
@@ -174,21 +186,26 @@ def retrieve_candidates(
     )
 
     if not results["ids"][0]:
-        return []
+        return {
+            "intent_passable": True,
+            "intent_confidence": parsed.get("confidence"),
+            "parsed_intent": parsed,
+            "results": []
+        }
 
     embeddings = np.array(results["embeddings"][0])
     ids = results["ids"][0]
     metas = results["metadatas"][0]
-    # Use title from metadata (cleaner display)
     titles = [m["title"] for m in metas]
 
     # ------------------------------------------------
-    # LOCAL CLUSTERING (DIVERSITY)
+    # LOCAL CLUSTERING
     # ------------------------------------------------
 
     local_k = min(LOCAL_CLUSTERS, len(embeddings))
     clusterer = AgglomerativeClustering(n_clusters=local_k)
     labels = clusterer.fit_predict(embeddings)
+
     scores = compute_weighted_scores(
         embeddings=embeddings,
         query_embedding=query_embedding,
@@ -201,6 +218,10 @@ def retrieve_candidates(
         reverse=True
     )
 
+    # ------------------------------------------------
+    # FINAL SELECTION
+    # ------------------------------------------------
+
     final = []
     for idx in ranked_indices[:RETURN_PER_CLUSTER * LOCAL_CLUSTERS]:
         final.append({
@@ -209,46 +230,34 @@ def retrieve_candidates(
             "metadata": metas[idx],
             "score": round(scores[idx], 4)
         })
-    # ------------------------------------------------
-    # HARD ACTOR PRIORITY ENFORCEMENT
-    # ------------------------------------------------
 
+    # Enforce actor constraint strictly (post-score)
     if actor_tokens:
         final = [
             m for m in final
             if all(
-                token.lower() in (m["metadata"].get("actor", "") or "").lower()
-                for token in actor_tokens
+                t.lower() in (m["metadata"].get("actor", "") or "").lower()
+                for t in actor_tokens
             )
         ]
+
     # ------------------------------------------------
-    # EXPLAINABILITY PAYLOAD (NON-INTRUSIVE)
+    # EXPLAINABILITY PAYLOAD
     # ------------------------------------------------
 
-    for i, m in enumerate(final):
+    for m in final:
         m["explanation"] = {
             "actor_constraint": actors[0] if actors else None,
-
-            "semantic_components": [
-                v["matched_phrase"]
-            for v in soft_intent.values()
-            if v.get("matched_phrase") and v.get("confidence", 0.0) >= 0.45
-        ],
-
-        "soft_constraints": soft_intent,
-
-        "filters_applied": where_clause,
-
-        # ---- scoring transparency ----
-            "weighted_score": round(m["score"], 4),
+            "semantic_components": used_semantic_phrases,
+            "soft_constraints": soft_intent,
+            "filters_applied": where_clause,
+            "weighted_score": m["score"],
             "score_breakdown": {
-                "semantic_weight": 0.65,
-                "cluster_weight": 0.35,
+                "semantic_weight": W_Q,
+                "cluster_weight": W_C,
                 "note": "Hard constraints enforced before scoring"
             }
         }
-
-
 
     return {
         "intent_passable": True,
@@ -257,53 +266,31 @@ def retrieve_candidates(
         "results": final
     }
 
-
-
-# ------------------ DEMO ------------------
+# ------------------------------------------------
+# DEMO
+# ------------------------------------------------
 
 if __name__ == "__main__":
     query = "emotional Tom Cruise movies"
-    res = retrieve_candidates(query)
-    results = res["results"]
+    response = retrieve_candidates(query)
 
     print("\nRetrieved Candidates:\n")
-    for r in results:
+
+    for r in response["results"]:
         print(f"{r['tmdb_id']} | {r['title']}")
+        exp = r["explanation"]
 
-        if "explanation" in r:
-            exp = r["explanation"]
-            print("  ↳ Explanation:")
+        print("  ↳ Explanation:")
+        print(f"     Actor Constraint      : {exp['actor_constraint']}")
 
-            # Actor constraint
-            print(f"     Actor Constraint      : {exp.get('actor_constraint')}")
+        if exp["semantic_components"]:
+            print("     Semantic Signals Used :")
+            for s in exp["semantic_components"]:
+                print(f"        - {s}")
+        else:
+            print("     Semantic Signals Used : None")
 
-            # Semantic signals actually used
-            semantic_components = exp.get("semantic_components", [])
-            if semantic_components:
-                print("     Semantic Signals Used :")
-                for s in semantic_components:
-                    print(f"        - {s}")
-            else:
-                print("     Semantic Signals Used : None")
-
-            # Soft constraints (axes detected)
-            soft_keys = list(exp.get("soft_constraints", {}).keys())
-            print(f"     Soft Constraints     : {soft_keys if soft_keys else 'None'}")
-
-            # Filters
-            print(f"     Filters Applied      : {exp.get('filters_applied')}")
-
-            # Weighted score
-            if "weighted_score" in exp:
-                print(f"     Final Weighted Score : {exp['weighted_score']}")
-
-            # Optional score breakdown (paper alignment)
-            breakdown = exp.get("score_breakdown")
-            if breakdown:
-                print("     Score Breakdown      :")
-                for k, v in breakdown.items():
-                    print(f"        - {k.replace('_', ' ').title()} : {v}")
-
-            print()
-
-
+        print(f"     Soft Constraints     : {list(exp['soft_constraints'].keys())}")
+        print(f"     Filters Applied      : {exp['filters_applied']}")
+        print(f"     Final Weighted Score : {exp['weighted_score']}")
+        print()
