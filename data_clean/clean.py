@@ -19,11 +19,11 @@ Design principles:
 import os
 import pandas as pd
 import numpy as np
-tmdfile = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tmdb_movies_demo.csv")
-# ------------------ CONFIG ------------------
 
-INPUT_CSV = tmdfile
-OUTPUT_CSV = "data_clean/tmdb_cleaned.csv"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+INPUT_CSV = os.path.join(BASE_DIR, "tmdb_movies_demo.csv")
+OUTPUT_CSV = os.path.join(BASE_DIR, "data_clean", "tmdb_cleaned.csv")
 
 MIN_OVERVIEW_LENGTH = 30  # characters
 

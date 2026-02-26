@@ -17,14 +17,14 @@ import pandas as pd
 from typing import Dict, List
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
-from semantic_axes import SEMANTIC_AXES
+from embeddings.embedding_singleton import EmbeddingModelSingleton
+from .semantic_axes import SEMANTIC_AXES
 
 # ============================================================
 # PATHS
 # ============================================================
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = os.getenv("DATA_DIR", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 ACTOR_STATS_CSV = os.path.join(
     BASE_DIR, "data_stats", "actor_stats.csv"
@@ -64,7 +64,7 @@ KNOWN_ACTORS = load_actor_vocabulary(ACTOR_STATS_CSV)
 # MODEL LOAD (ONCE)
 # ============================================================
 
-_embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+_embedding_model = EmbeddingModelSingleton.get_model("all-MiniLM-L6-v2")
 
 
 def _cosine_sim(a: np.ndarray, b: np.ndarray) -> float:

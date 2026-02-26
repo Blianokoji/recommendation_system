@@ -28,3 +28,5 @@ Thumbs.db
 .vscode/
 .idea/
 .env
+DEPLOYMENT_AND_INFRASTRUCTURE.md
+analysis/

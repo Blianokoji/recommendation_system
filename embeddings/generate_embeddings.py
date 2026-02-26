@@ -17,7 +17,7 @@ Design principles:
 import os
 import numpy as np
 import pandas as pd
-from sentence_transformers import SentenceTransformer
+from embeddings.embedding_singleton import EmbeddingModelSingleton
 from sklearn.preprocessing import normalize
 
 # ------------------ PATH CONFIG ------------------
@@ -55,7 +55,7 @@ print(f"[INFO] Loaded {len(texts)} movies for embedding.")
 # ------------------ LOAD MODEL ------------------
 
 print("[INFO] Loading SentenceTransformer model: all-MiniLM-L6-v2")
-model = SentenceTransformer("all-MiniLM-L6-v2")
+model = EmbeddingModelSingleton.get_model("all-MiniLM-L6-v2")
 
 # ------------------ GENERATE EMBEDDINGS ------------------
 

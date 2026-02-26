@@ -1,8 +1,8 @@
 import numpy as np
-from sentence_transformers import SentenceTransformer
+from embeddings.embedding_singleton import EmbeddingModelSingleton
 from .semantic_axes import SEMANTIC_AXES
 
-_model = SentenceTransformer("all-MiniLM-L6-v2")
+_model = EmbeddingModelSingleton.get_model("all-MiniLM-L6-v2")
 
 def cosine_sim(a, b):
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))

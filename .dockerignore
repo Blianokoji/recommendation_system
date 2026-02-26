@@ -1,0 +1,14 @@
+pipeline/
+data_clean/
+centroids/
+data_stats/
+analysis/
+tmdb_movies_demo.csv
+tmdb_clustered_incremental.csv
+.venv/
+.env
+.git/
+.gitignore
+.python-version
+README.md
+DEPLOYMENT_AND_INFRASTRUCTURE.md

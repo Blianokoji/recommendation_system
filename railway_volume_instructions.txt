@@ -1,0 +1,54 @@
+Instructions to Deploy Missing ML Data to Railway Volumes
+=========================================================
+Since we use `.gitignore` to prevent ~100MB of ML and DB files from blooming
+your Git history, Railway won't receive them automatically. 
+Instead, we will mount a Persistent Volume on Railway and use the Railway 
+CLI to manually upload these files.
+
+This is the most scalable, professional setup as it fully decouples the 
+application code from the underlying data store.
+
+Follow these steps AFTER you have linked your GitHub pushed code to Railway:
+
+Prerequisites
+-------------
+1. Install Railway CLI on your computer:
+   npm i -g @railway/cli (or check https://docs.railway.app/reference/cli-api)
+2. Login to Railway:
+   railway login
+
+Step 1: Create a Volume on Railway
+----------------------------------
+1. In your Railway dashboard, click `Create` -> `Volume`.
+2. Name it `app-data` (or anything you prefer).
+3. Connect the Volume to your backend FastAPI service at the Mount Path: `/app/data`
+   *Note: In your Railway Service Settings -> Volumes, set Mount Path to `/app/data`*
+
+Step 2: Upload Local Data Using Railway CLI
+-------------------------------------------
+Open your terminal in the root of `recommendation_system` on your computer.
+
+Use `railway volume upload` to copy the required directories to the volume.
+
+Run the following commands:
+
+railway volume upload chroma_db /app/data/chroma_db
+railway volume upload models /app/data/models
+railway volume upload embeddings /app/data/embeddings
+railway volume upload centroids /app/data/centroids
+
+Step 3: Update Paths in Code
+----------------------------
+The application code reads from `models/`, `embeddings/`, etc.
+Because we'll mount them to `/app/data` in production, you can set an
+environment variable in Railway:
+DATA_DIR=/app/data
+
+Then, inside your fastAPI code, you can use:
+BASE_DIR = os.getenv("DATA_DIR", os.path.dirname(os.path.abspath(__file__)))
+(We will handle this in code right now).
+
+Step 4: Restart Service
+-----------------------
+1. Once all folders are uploaded, trigger a manual redeploy in the Railway dashboard.
+2. The service will now locate all models, embeddings, and ChromaDB inside `/app/data/` dynamically!

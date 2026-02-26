@@ -1,12 +1,12 @@
 import os
 import json
 import numpy as np
-from sentence_transformers import SentenceTransformer
+from embeddings.embedding_singleton import EmbeddingModelSingleton
 from sklearn.metrics.pairwise import cosine_similarity
 
 # ------------------ PATHS ------------------
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = os.getenv("DATA_DIR", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 CENTROID_DIR = os.path.join(BASE_DIR, "centroids")
 CENTROIDS_FILE = os.path.join(CENTROID_DIR, "actor_centroids.npy")
@@ -22,7 +22,7 @@ with open(ACTOR_INDEX_FILE, "r", encoding="utf-8") as f:
 
 _index_to_actor = {v: k for k, v in _actor_index.items()}
 
-_model = SentenceTransformer(EMBED_MODEL)
+_model = EmbeddingModelSingleton.get_model(EMBED_MODEL)
 
 # ------------------ CORE ------------------
 

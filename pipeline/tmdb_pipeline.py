@@ -16,7 +16,8 @@ load_dotenv()
 BASE_URL = "https://api.themoviedb.org/3"
 API_KEY = os.getenv("TMDB_API_KEY")
 
-OUTPUT_FILE = "tmdb_movies_demo.csv"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUTPUT_FILE = os.path.join(BASE_DIR, "tmdb_movies_demo.csv")
 
 FIELDNAMES = [
     "tmdb_id",

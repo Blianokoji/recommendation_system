@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-DATA_CSV = os.path.join(BASE_DIR, "tmdb_clustered_incremental.csv")
+DATA_CSV = os.path.join(BASE_DIR, "clustering", "tmdb_clustered_incremental.csv")
 OUTPUT_FILE = os.path.join(BASE_DIR, "centroids", "actor_cluster_map.json")
 
 TOP_K_CLUSTERS = 5

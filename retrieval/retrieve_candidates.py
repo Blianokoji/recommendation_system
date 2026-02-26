@@ -21,7 +21,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import numpy as np
 from typing import List, Dict
 
-from sentence_transformers import SentenceTransformer
+from embeddings.embedding_singleton import EmbeddingModelSingleton
 from sklearn.cluster import AgglomerativeClustering
 
 from vector_store.chroma_client import get_chroma_collection
@@ -45,7 +45,7 @@ W_C = 0.35   # cluster coherence
 # MODEL
 # ------------------------------------------------
 
-_embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+_embedding_model = EmbeddingModelSingleton.get_model(EMBEDDING_MODEL_NAME)
 
 def embed_text(text: str) -> np.ndarray:
     return _embedding_model.encode(text, normalize_embeddings=True)
