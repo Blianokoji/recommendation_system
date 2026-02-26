@@ -7,9 +7,8 @@ RUN pip install --no-cache-dir uv
 
 WORKDIR /app
 
-# Persistent storage for ChromaDB
-# Mount volume to /app/chroma_db
-VOLUME /app/chroma_db
+# Persistent storage for ChromaDB and ML paths
+# (Railway manages volumes externally, so no VOLUME keyword here)
 
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen
