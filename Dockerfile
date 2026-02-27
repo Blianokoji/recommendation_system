@@ -1,14 +1,21 @@
 FROM python:3.11-slim
 
-RUN apt-get update && apt-get install -y curl \
+RUN apt-get update && apt-get install -y curl wget unzip \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir uv
 
 WORKDIR /app
 
-# Persistent storage for ChromaDB and ML paths
-# (Railway manages volumes externally, so no VOLUME keyword here)
+# Persistent storage logic handled via local GitHub download caching
+# Download the model artifacts into a temporary setup block
+ARG DATA_URL="https://github.com/Blianokoji/recommendation_system/releases/download/v1.0.0/ml_data.zip"
+RUN wget -qO ml_data.zip ${DATA_URL} && \
+    unzip -q ml_data.zip -d /app/data && \
+    rm ml_data.zip
+
+# Map local data directory logic from earlier
+ENV DATA_DIR="/app/data"
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
