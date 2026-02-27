@@ -27,7 +27,7 @@ from .semantic_axes import SEMANTIC_AXES
 BASE_DIR = os.getenv("DATA_DIR", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 ACTOR_STATS_CSV = os.path.join(
-    BASE_DIR, "data_stats", "actor_stats.csv"
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data_stats", "actor_stats.csv"
 )
 
 # ============================================================

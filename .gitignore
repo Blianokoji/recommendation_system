@@ -21,6 +21,7 @@ chroma_db/
 
 # Data
 *.csv
+!data_stats/actor_stats.csv
 
 # OS & IDE
 .DS_Store
