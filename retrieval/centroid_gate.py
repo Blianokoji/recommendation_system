@@ -14,15 +14,29 @@ ACTOR_INDEX_FILE = os.path.join(CENTROID_DIR, "actor_index.json")
 
 EMBED_MODEL = "all-MiniLM-L6-v2"
 
-# ------------------ LOAD ------------------
+# ------------------ LAZY LOAD ------------------
 
-_centroids = np.load(CENTROIDS_FILE)
-with open(ACTOR_INDEX_FILE, "r", encoding="utf-8") as f:
-    _actor_index = json.load(f)
+_centroids = None
+_index_to_actor = None
+_model = None
 
-_index_to_actor = {v: k for k, v in _actor_index.items()}
-
-_model = EmbeddingModelSingleton.get_model(EMBED_MODEL)
+def _load_resources():
+    global _centroids, _index_to_actor, _model
+    
+    if _centroids is None:
+        if not os.path.exists(CENTROIDS_FILE):
+             raise FileNotFoundError(f"Centroids file missing at {CENTROIDS_FILE}. Have you uploaded the volume?")
+        _centroids = np.load(CENTROIDS_FILE)
+        
+    if _index_to_actor is None:
+        if not os.path.exists(ACTOR_INDEX_FILE):
+             raise FileNotFoundError(f"Actor index missing at {ACTOR_INDEX_FILE}")
+        with open(ACTOR_INDEX_FILE, "r", encoding="utf-8") as f:
+            _actor_index = json.load(f)
+        _index_to_actor = {v: k for k, v in _actor_index.items()}
+        
+    if _model is None:
+        _model = EmbeddingModelSingleton.get_model(EMBED_MODEL)
 
 # ------------------ CORE ------------------
 
@@ -34,6 +48,8 @@ def get_relevant_actor_centroids(
     """
     Returns actor names whose centroid is relevant to the query.
     """
+
+    _load_resources()
 
     q_emb = _model.encode(query, normalize_embeddings=True).reshape(1, -1)
     sims = cosine_similarity(q_emb, _centroids)[0]
