@@ -9,7 +9,7 @@ import chromadb
 from chromadb.config import Settings
 
 BASE_DIR = os.getenv("DATA_DIR", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-CHROMA_PATH = os.path.join(BASE_DIR, "chroma_db")
+CHROMA_PATH = os.getenv("CHROMA_DB_PATH", os.path.join(BASE_DIR, "chroma_db"))
 
 COLLECTION_NAME = "tmdb_movies"
 

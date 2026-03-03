@@ -157,18 +157,49 @@ def parse_query(query: str) -> Dict:
         }
 
     # --------------------------------------------------------
-    # HARD CONSTRAINTS (ACTORS)
+    # HARD CONSTRAINTS (ACTORS) WITH FUZZY FALLBACK
     # --------------------------------------------------------
 
     actors: List[str] = []
+    temp_q = q # Use a temporary query string for actor replacement
 
+    # 1. Exact substring match
+    found_actors_lower = set()
     for actor in KNOWN_ACTORS:
-        if actor in q:
-            actors.append(actor.title())
+        if actor.lower() in temp_q:
+            found_actors_lower.add(actor.lower())
+            actors.append(actor) # Append original cased actor
             # Remove actor mention to prevent semantic pollution
-            q = q.replace(actor, " ")
+            temp_q = temp_q.replace(actor.lower(), " ")
 
-    q = " ".join(q.split())
+    # 2. Fuzzy match if no exact match found
+    if not actors:
+        # Extract word n-grams (1, 2, 3 words) from query to check against actor names
+        words = re.findall(r'\b\w+\b', temp_q)
+        ngrams = []
+        for i in range(len(words)):
+            ngrams.append(words[i])
+            if i < len(words) - 1:
+                ngrams.append(words[i] + " " + words[i+1])
+            if i < len(words) - 2:
+                ngrams.append(words[i] + " " + words[i+1] + " " + words[i+2])
+
+        # Optimize by caching lowercased mapping
+        known_lower_map = {a.lower(): a for a in KNOWN_ACTORS}
+
+        for ngram in ngrams:
+            matches = get_close_matches(ngram, list(known_lower_map.keys()), n=1, cutoff=0.85)
+            if matches and matches[0] not in found_actors_lower: # Avoid re-adding already found actors
+                actors.append(known_lower_map[matches[0]])
+                found_actors_lower.add(matches[0])
+                # Remove actor mention to prevent semantic pollution
+                temp_q = temp_q.replace(ngram, " ") # Replace the ngram that matched
+
+    # Deduplicate and title-case actors
+    actors = sorted(list(set([a.title() for a in actors])))
+
+    # Update the main query string 'q' with the cleaned version
+    q = " ".join(temp_q.split())
 
     # --------------------------------------------------------
     # SOFT + INFERRED INTENT (SEMANTIC)

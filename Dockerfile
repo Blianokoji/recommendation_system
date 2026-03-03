@@ -16,6 +16,7 @@ RUN wget -qO ml_data.zip ${DATA_URL} && \
 
 # Map local data directory logic from earlier
 ENV DATA_DIR="/app/data"
+ENV CHROMA_DB_PATH="/app/data"
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
@@ -24,4 +25,5 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Using shell form to support dynamic $PORT substitution injected by Railway
+CMD uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}
