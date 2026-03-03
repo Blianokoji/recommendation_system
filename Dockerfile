@@ -23,7 +23,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-EXPOSE 8000
+EXPOSE 8080
 
 # Using shell form to support dynamic $PORT substitution injected by Railway
-CMD uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}
+CMD uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8080}
