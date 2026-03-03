@@ -11,3 +11,8 @@ tmdb_clustered_incremental.csv
 .python-version
 README.md
 DEPLOYMENT_AND_INFRASTRUCTURE.md
+*.zip
+ml_data.zip
+models/
+embeddings/
+chroma_db/

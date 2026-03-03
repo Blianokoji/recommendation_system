@@ -18,6 +18,7 @@ chroma_db/
 *.npy
 *.pt
 *.onnx
+*.zip
 
 # Data
 *.csv
