@@ -135,8 +135,8 @@ def retrieve_candidates(
         default=0.0
     )
 
-    semantic_embeddings = []
-    used_semantic_phrases = []
+    semantic_embeddings = [embed_text(parsed["original_query"])]
+    used_semantic_phrases = [parsed["original_query"]]
 
     for constraint in soft_intent.values():
         phrase = constraint.get("matched_phrase")
@@ -151,10 +151,8 @@ def retrieve_candidates(
             semantic_embeddings.append(embed_text(phrase))
             used_semantic_phrases.append(phrase)
 
-    if semantic_embeddings:
-        query_embedding = np.mean(semantic_embeddings, axis=0)
-    else:
-        query_embedding = embed_text("movie")
+    # Blend original query with the dominant semantic signals smoothly
+    query_embedding = np.mean(semantic_embeddings, axis=0)
 
     # ------------------------------------------------
     # HARD CONSTRAINTS → DOCUMENT FILTER (ACTORS)
