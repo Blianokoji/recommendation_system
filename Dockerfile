@@ -16,7 +16,7 @@ RUN wget -qO ml_data.zip ${DATA_URL} && \
 
 # Map local data directory logic from earlier
 ENV DATA_DIR="/app/data"
-ENV CHROMA_DB_PATH="/app/data"
+ENV CHROMA_DB_PATH="/app/data/chroma_db"
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
