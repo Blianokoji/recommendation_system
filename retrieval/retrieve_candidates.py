@@ -57,7 +57,9 @@ def embed_text(text: str) -> np.ndarray:
 def compute_weighted_scores(
     embeddings: np.ndarray,
     query_embedding: np.ndarray,
-    cluster_labels: np.ndarray
+    cluster_labels: np.ndarray,
+    weight_q: float = W_Q,
+    weight_c: float = W_C
 ) -> List[float]:
     """
     Score(m) = w_q * Q(m) + w_c * C(m)
@@ -75,8 +77,8 @@ def compute_weighted_scores(
     ])
 
     final_scores = (
-        W_Q * semantic_scores +
-        W_C * cluster_scores
+        weight_q * semantic_scores +
+        weight_c * cluster_scores
     )
 
     return final_scores.tolist()
@@ -204,10 +206,20 @@ def retrieve_candidates(
     clusterer = AgglomerativeClustering(n_clusters=local_k)
     labels = clusterer.fit_predict(embeddings)
 
+    # Dynamic Weights: if no predefined strong emotional anchors were matched,
+    # to avoid the dominant local cluster suppressing hyper-specific outlier matches (e.g. "golf")
+    # we heavily reduce the cluster weight so the raw semantic similarity determines the winner.
+    if len(used_semantic_phrases) == 1 and used_semantic_phrases[0] == parsed["original_query"]:
+        active_wq, active_wc = 0.95, 0.05
+    else:
+        active_wq, active_wc = W_Q, W_C
+
     scores = compute_weighted_scores(
         embeddings=embeddings,
         query_embedding=query_embedding,
-        cluster_labels=labels
+        cluster_labels=labels,
+        weight_q=active_wq,
+        weight_c=active_wc
     )
 
     ranked_indices = sorted(
