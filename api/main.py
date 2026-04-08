@@ -5,10 +5,11 @@ Provides safe and reasoned movie recommendation endpoints.
 
 Design:
 - /retrieve/core     → Deterministic retrieval (NO SLM)
-- /retrieve/reasoned → SLM-augmented reranking (OPTIONAL)
+- /retrieve/reasoned → SLM-augmented reranking (DISABLED — returns 503)
+- /retrieve          → Unified, routes via use_slm flag
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Optional
@@ -89,34 +90,12 @@ def retrieve_reasoned(req: QueryRequest):
     """
     Reasoned retrieval.
     SLM is ONLY used for reranking already-safe candidates.
+    Currently disabled — returns 503 until SLM layer is implemented.
     """
-    # SLM TEMPORARILY DISABLED
-    return {
-         "error": "SLM endpoint is temporarily disabled.",
-         "mode": "disabled"
-    }
-
-    # base_results = retrieve_candidates(req.query)
-
-    # if not base_results:
-    #     return {
-    #         "mode": "reasoned",
-    #         "query": req.query,
-    #         "result_count": 0,
-    #         "results": []
-    #     }
-
-    # reranked = rerank_with_slm(
-    #     query=req.query,
-    #     candidates=base_results
-    # )
-
-    # return {
-    #     "mode": "reasoned",
-    #     "query": req.query,
-    #     "result_count": len(reranked),
-    #     "results": reranked
-    # }
+    raise HTTPException(
+        status_code=503,
+        detail="SLM endpoint is temporarily disabled. Use /retrieve/core instead."
+    )
 
 
 # -------------------------------------------------

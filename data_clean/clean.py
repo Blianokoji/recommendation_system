@@ -31,10 +31,6 @@ MIN_OVERVIEW_LENGTH = 30  # characters
 
 print("[INFO] Loading dataset...")
 df = pd.read_csv(INPUT_CSV)
-csv_file = open(OUTPUT_CSV, "a", newline="", encoding="utf-8")
-# writer = csv.DictWriter(csv_file, fieldnames=FIELDNAMES)
-# if csv_file.tell() == 0:
-#     writer.writeheader()
 print(f"[INFO] Initial dataset size: {df.shape}")
 
 # ------------------ BASIC SANITY ------------------
