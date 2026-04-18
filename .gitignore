@@ -22,9 +22,7 @@ chroma_db/
 
 # Data
 *.csv
-!data_stats/actor_stats.csv
-golf_results.json
-happy_results.json
+*.tex
 
 # OS & IDE
 .DS_Store
