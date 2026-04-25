@@ -34,3 +34,4 @@ Thumbs.db
 .env
 DEPLOYMENT_AND_INFRASTRUCTURE.md
 analysis/
+cleanup_list.md
