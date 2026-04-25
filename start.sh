@@ -1,14 +1,16 @@
 #!/bin/bash
 set -e
 
-echo "=== System Initialization ==="
-echo "Checking and building ML artifacts (if missing)..."
-
-# Run the idempotent build pipeline
-# We assume dependencies are installed in the system path or current environment
-python build_pipeline.py
+echo "=== System Check ==="
+# Check if ChromaDB exists (should be baked into the image)
+if [ ! -d "chroma_db" ]; then
+  echo "[WARN] chroma_db not found! Attempting emergency build..."
+  python build_pipeline.py
+else
+  echo "[INFO] ML artifacts found in image. Skipping build."
+fi
 
 echo "=== Starting API Server ==="
 # Run the FastAPI server via Uvicorn
-# Use the PORT environment variable, defaulting to 8000
+# Link to Render's dynamic PORT
 exec uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}
