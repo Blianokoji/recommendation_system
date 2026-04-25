@@ -28,7 +28,7 @@ def _cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b) / denom)
 
 
-def infer_soft_intent(query: str, threshold: float = 0.35) -> dict:
+def infer_soft_intent(query: str, threshold: float = 0.55) -> dict:
     """
     Infers semantic intent from query using SEMANTIC_AXES.
 

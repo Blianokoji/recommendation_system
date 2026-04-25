@@ -2,13 +2,14 @@
 Query Parsing Module
 --------------------
 Converts raw user queries into structured JSON with
-hard (deterministic) and soft (semantic) constraints.
+hard (deterministic), soft (semantic), and fuzzy constraints.
 
 Design principles:
 - Intent classification: semantic centroid gate (not keywords)
 - Confidence: real cosine similarity, not a hand-tuned heuristic
 - Identity entities (actors) are enforced as hard constraints
 - Year range is enforced as a hard constraint
+- Qualitative temporal words (latest, old, classic) use fuzzy membership
 - Abstract intent (emotion, tone) is inferred via semantic axes
 - Genre is treated as an inferred signal, not a constraint
 - No keyword hardcoding for abstract intent
@@ -18,13 +19,14 @@ Design principles:
 import os
 import re
 import pandas as pd
-from difflib import get_close_matches
+from difflib import get_close_matches, SequenceMatcher
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from embeddings.embedding_singleton import EmbeddingModelSingleton
 from .intent_gate import classify_intent
 from .semantic_infer import infer_soft_intent
+from .fuzzy_temporal import extract_temporal_fuzzy, strip_temporal_qualitative_tokens
 
 # ============================================================
 # PATHS
@@ -192,23 +194,87 @@ def _check_allow_adult(q: str) -> bool:
     return True
 
 # ============================================================
-# ACTOR EXTRACTION (EXACT + FUZZY)
+# JARO-WINKLER SIMILARITY (pure Python fallback)
 # ============================================================
 
-def _extract_actors(q: str) -> Tuple[List[str], str]:
+def _jaro_winkler(s1: str, s2: str) -> float:
+    """
+    Jaro-Winkler similarity between two strings.
+    Returns a value in [0.0, 1.0] where 1.0 is an exact match.
+    """
+    s1_len = len(s1)
+    s2_len = len(s2)
+    if s1_len == 0 and s2_len == 0:
+        return 1.0
+    if s1_len == 0 or s2_len == 0:
+        return 0.0
+
+    match_distance = max(s1_len, s2_len) // 2 - 1
+    if match_distance < 0:
+        match_distance = 0
+
+    s1_matches = [False] * s1_len
+    s2_matches = [False] * s2_len
+
+    matches = 0
+    transpositions = 0
+
+    for i in range(s1_len):
+        start = max(0, i - match_distance)
+        end = min(i + match_distance + 1, s2_len)
+        for j in range(start, end):
+            if s2_matches[j] or s1[i] != s2[j]:
+                continue
+            s1_matches[i] = True
+            s2_matches[j] = True
+            matches += 1
+            break
+
+    if matches == 0:
+        return 0.0
+
+    k = 0
+    for i in range(s1_len):
+        if not s1_matches[i]:
+            continue
+        while not s2_matches[k]:
+            k += 1
+        if s1[i] != s2[k]:
+            transpositions += 1
+        k += 1
+
+    jaro = (matches / s1_len + matches / s2_len +
+            (matches - transpositions / 2) / matches) / 3
+
+    # Winkler bonus for common prefix (up to 4 chars)
+    prefix = 0
+    for i in range(min(4, s1_len, s2_len)):
+        if s1[i] == s2[i]:
+            prefix += 1
+        else:
+            break
+
+    return jaro + prefix * 0.1 * (1 - jaro)
+
+# ============================================================
+# ACTOR EXTRACTION (EXACT + FUZZY with Jaro-Winkler confidence)
+# ============================================================
+
+def _extract_actors(q: str) -> Tuple[List[Dict], str]:
     """
     Returns (actors_list, cleaned_query_without_actor_tokens).
-    Uses exact substring match first, then fuzzy n-gram fallback.
+    Each actor entry is {"name": str, "confidence": float}.
+    Exact matches get confidence=1.0; fuzzy matches get Jaro-Winkler score.
     """
     temp_q = q
-    actors: List[str] = []
+    actors: List[Dict] = []
     found_lower: set = set()
 
     # 1. Exact substring match (longest names first prevents partial shadowing)
     for actor in KNOWN_ACTORS:
         if actor.lower() in temp_q:
             found_lower.add(actor.lower())
-            actors.append(actor)
+            actors.append({"name": actor, "confidence": 1.0})
             temp_q = temp_q.replace(actor.lower(), " ")
 
     # 2. Fuzzy fallback — only if exact match found nothing
@@ -225,16 +291,26 @@ def _extract_actors(q: str) -> Tuple[List[str], str]:
         known_lower_map = {a.lower(): a for a in KNOWN_ACTORS}
 
         for ngram in ngrams:
-            matches = get_close_matches(ngram, list(known_lower_map.keys()), n=1, cutoff=0.85)
+            matches = get_close_matches(ngram, list(known_lower_map.keys()), n=1, cutoff=0.80)
             if matches and matches[0] not in found_lower:
-                actors.append(known_lower_map[matches[0]])
-                found_lower.add(matches[0])
-                temp_q = temp_q.replace(ngram, " ")
+                jw_score = _jaro_winkler(ngram.lower(), matches[0].lower())
+                if jw_score >= 0.82:
+                    actors.append({"name": known_lower_map[matches[0]], "confidence": round(jw_score, 3)})
+                    found_lower.add(matches[0])
+                    temp_q = temp_q.replace(ngram, " ")
 
     # Deduplicate and title-case
-    actors = sorted(list(set(a.title() for a in actors)))
+    seen = set()
+    unique_actors = []
+    for a in actors:
+        name_tc = a["name"].title()
+        if name_tc not in seen:
+            seen.add(name_tc)
+            unique_actors.append({"name": name_tc, "confidence": a["confidence"]})
+    unique_actors.sort(key=lambda x: x["name"])
+
     cleaned_q = " ".join(temp_q.split())
-    return actors, cleaned_q
+    return unique_actors, cleaned_q
 
 # ============================================================
 # MAIN QUERY PARSER
@@ -276,20 +352,39 @@ def parse_query(query: str) -> Dict:
     confidence = intent_result["confidence"]
 
     # --------------------------------------------------------
+    # FUZZY TEMPORAL (must run BEFORE hard year extraction)
+    # --------------------------------------------------------
+    temporal_fuzzy = extract_temporal_fuzzy(q)
+    if temporal_fuzzy:
+        q = strip_temporal_qualitative_tokens(q)
+
+    # --------------------------------------------------------
     # YEAR CONSTRAINT (extract + strip from query)
     # --------------------------------------------------------
     year_constraint = extract_year_constraint(q)
     q = _strip_year_tokens(q, year_constraint)
 
+    # If we found a fuzzy temporal AND no explicit numeric year,
+    # blank out year so retrieval uses the fuzzy membership instead.
+    if temporal_fuzzy and year_constraint.get("year_from") is None and year_constraint.get("year_to") is None:
+        fuzzy_constraints_temporal = temporal_fuzzy
+    else:
+        # Explicit numeric year takes priority over fuzzy
+        fuzzy_constraints_temporal = None
+
     # --------------------------------------------------------
-    # HARD CONSTRAINTS — ACTORS (exact → fuzzy fallback)
+    # HARD CONSTRAINTS — ACTORS (exact -> fuzzy with confidence)
     # --------------------------------------------------------
-    actors, q = _extract_actors(q)
+    actor_matches, q = _extract_actors(q)
+    # Separate into names list and confidence map
+    actors = [a["name"] for a in actor_matches]
+    actor_confidence = {a["name"]: a["confidence"] for a in actor_matches}
 
     # --------------------------------------------------------
     # SOFT + INFERRED INTENT (semantic, on cleaned query)
     # --------------------------------------------------------
-    soft_result = infer_soft_intent(q)
+    semantic_q = re.sub(r'\b(movies?|films?|shows?)\b', ' ', q).strip()
+    soft_result = infer_soft_intent(semantic_q)
     soft_constraints = soft_result["soft_constraints"]
     inferred_signals = soft_result["inferred_signals"]
 
@@ -299,16 +394,33 @@ def parse_query(query: str) -> Dict:
     allow_adult = _check_allow_adult(q)
 
     # --------------------------------------------------------
+    # BUILD FUZZY CONSTRAINTS PAYLOAD
+    # --------------------------------------------------------
+    fuzzy_constraints = {}
+    if fuzzy_constraints_temporal:
+        fuzzy_constraints["temporal"] = {
+            "label": fuzzy_constraints_temporal["label"],
+            "matched_word": fuzzy_constraints_temporal["matched_word"],
+            "mu_func": fuzzy_constraints_temporal["mu_func"]
+        }
+    # Flag actors with sub-1.0 confidence as fuzzy
+    fuzzy_actors = {name: conf for name, conf in actor_confidence.items() if conf < 1.0}
+    if fuzzy_actors:
+        fuzzy_constraints["actors"] = fuzzy_actors
+
+    # --------------------------------------------------------
     # FINAL STRUCTURED OUTPUT
     # --------------------------------------------------------
     return {
         "intent_type": "movie_search",
         "hard_constraints": {
             "actors": actors,
+            "actor_confidence": actor_confidence,
             "year": year_constraint,
         },
         "soft_constraints": soft_constraints,
         "inferred_signals": inferred_signals,
+        "fuzzy_constraints": fuzzy_constraints,
         "filters": {
             "allow_adult": allow_adult,
         },
