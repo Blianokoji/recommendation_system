@@ -22,8 +22,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 # Core retrieval (already working)
 from retrieval.retrieve_candidates import retrieve_candidates
 
-# Optional SLM reasoning layer (safe stub for demo)
-# from slm.reasoner import rerank_with_slm
+# Optional SLM reasoning layer
+from slm.reasoner import rerank_with_slm
 
 # -------------------------------------------------
 # FASTAPI APP
@@ -90,12 +90,37 @@ def retrieve_reasoned(req: QueryRequest):
     """
     Reasoned retrieval.
     SLM is ONLY used for reranking already-safe candidates.
-    Currently disabled — returns 503 until SLM layer is implemented.
     """
-    raise HTTPException(
-        status_code=503,
-        detail="SLM endpoint is temporarily disabled. Use /retrieve/core instead."
-    )
+    
+    # 1. Get deterministic candidates
+    deterministic_results = retrieve_candidates(req.query)
+    
+    # 2. Check if valid
+    if not deterministic_results.get("intent_passable"):
+        return {
+            "mode": "reasoned",
+            "query": req.query,
+            "intent_passable": False,
+            "reason": deterministic_results.get("reason"),
+            "results": []
+        }
+        
+    candidates = deterministic_results.get("results", [])
+    parsed_intent = deterministic_results.get("parsed_intent", {})
+    
+    # 3. Pass more candidates for slm to evaluate (take all returned by default limits)
+    # SLM will pick the top 5
+    reranked = rerank_with_slm(req.query, parsed_intent, candidates, max_results=5)
+
+    return {
+        "mode": "reasoned",
+        "query": req.query,
+        "intent_passable": True,
+        "intent_confidence": deterministic_results.get("intent_confidence"),
+        "parsed_intent": parsed_intent,
+        "result_count": len(reranked),
+        "results": reranked
+    }
 
 
 # -------------------------------------------------
@@ -126,5 +151,5 @@ def health():
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.environ.get("PORT", 8000))
     uvicorn.run("api.main:app", host="0.0.0.0", port=port)
