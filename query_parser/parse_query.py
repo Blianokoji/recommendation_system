@@ -34,7 +34,7 @@ from .fuzzy_temporal import extract_temporal_fuzzy, strip_temporal_qualitative_t
 
 BASE_DIR = os.getenv("DATA_DIR", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ACTOR_STATS_CSV = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data_stats", "actor_stats.csv"
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "centroids", "actor_stats.csv"
 )
 
 # ============================================================

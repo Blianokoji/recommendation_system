@@ -40,12 +40,16 @@ def main():
         script_path = os.path.join(base_dir, *step.split("/"))
         target_path = os.path.join(base_dir, *target.split("/"))
         
-        if not os.path.exists(script_path):
-            print(f"\n[Warning] Script not found at {script_path}. Did you delete it?")
-            sys.exit(1)
-            
+        # Check target FIRST — if the artifact already exists, skip entirely.
+        # This is critical for Docker builds where pre-built artifacts are
+        # baked in but the original build scripts may not be present.
         if os.path.exists(target_path):
             print(f"-> [Skip] {step} (Target already exists: {target})")
+            continue
+            
+        if not os.path.exists(script_path):
+            print(f"\n[Warning] Script not found at {script_path} and target {target} is missing.")
+            print(f"[Warning] Skipping this step. If this is required, rebuild from source.")
             continue
             
         run_script(script_path)

@@ -1,20 +1,28 @@
-pipeline/
-data_clean/
-centroids/
-analysis/
-tmdb_movies_demo.csv
-tmdb_clustered_incremental.csv
-.venv/
-.env
+# Version control & environment
 .git/
 .gitignore
 .python-version
+.venv/
+.env
+
+# Documentation
 README.md
 DEPLOYMENT_AND_INFRASTRUCTURE.md
+
+# Intermediate / scratch files
 *.zip
 ml_data.zip
+__pycache__/
+*.pyc
+
+# Pre-built chroma_db (rebuilt during docker build)
 chroma_db/
-*.npy
-*.joblib
-*.pt
-*.onnx
+
+# Pipeline scripts not needed at runtime
+# (but DO NOT exclude data_clean/, centroids/, embeddings/, models/, clustering/
+#  — their artifacts are explicitly COPY'd in the Dockerfile)
+
+# Docker / compose files (no need to copy themselves into the image)
+Dockerfile
+docker-compose.yml
+.dockerignore
