@@ -30,6 +30,7 @@ def main():
         ("models/cluster.py", "clustering/tmdb_clustered_incremental.csv"),
         ("centroids/build_actor_centroids.py", "centroids/actor_centroids.npy"),
         ("centroids/build_actor_cluster_map.py", "centroids/actor_cluster_map.json"),
+        ("query_parser/build_intent_centroid.py", "query_parser/movie_intent_centroid.npy"),
         ("vector_store/chroma_ingest.py", "chroma_db/chroma.sqlite3"),
         # GA weight optimization — MUST come last (needs populated ChromaDB)
         ("optimization/train_weights.py", "models/optimal_weights.json"),

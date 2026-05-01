@@ -40,6 +40,7 @@ COPY retrieval/     retrieval/
 COPY query_parser/  query_parser/
 COPY vector_store/  vector_store/
 COPY slm/           slm/
+COPY optimization/  optimization/
 COPY embeddings/embedding_singleton.py embeddings/embedding_singleton.py
 COPY build_pipeline.py .
 COPY start.sh .
